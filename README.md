@@ -8,14 +8,25 @@ https://www.openslr.org/17
 Folder Strcture:
 
 Root Folder
+
 │
+
 ├── musan/
+
 │   ├── music/   
+
 │   ├── noise/   
+
 │   └── speech/
+
 │
+
 ├── Task1_Anechoic/
+
 │
+
 ├── Task2_Reverberant/
+
 │
+
 └── Task3_RealTime/
