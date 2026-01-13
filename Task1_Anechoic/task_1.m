@@ -242,7 +242,7 @@ unzip(loc,modelsLocation)
 addpath(fullfile(modelsLocation,"separateSpeakers"))
 addpath(fullfile(pwd,"separateSpeakers"))
 %%
-%[text] #### **Method 1: Use separateSpeakers and then Combine Signals**
+%[text] #### **Method 1: Use separateSpeakers and then Combine Signals** [**NotebookLM**](https://notebooklm.google.com/notebook/49228b36-4f58-46ab-97f5-b83e99f2115f)
 %[text] **Anechoic Chamber**
 %[text] Use the pre-trained speaker separation model to seperate target and interference signals at the two microphone elements respectively:
 anechoic_mic1_out = separateSpeakersTest(anechoic_rcv_noisy(1,:),signal_length,fs); %[text:anchor:TMP_6230]
