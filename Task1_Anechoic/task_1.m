@@ -232,6 +232,23 @@ td_beamformer = phased.TimeDelayBeamformer('SensorArray',micULA,...
 td_bf_anechoic = td_beamformer(anechoic_rcv_noisy');
 soundsc(td_bf_anechoic(1:num_play_samples)',fs)
 %%
+%[text] ### Custom Beamforming (Edge-Device Optimized)
+%[text] The following beamformers are custom implementations optimized for resource-constrained edge devices.
+%[text] They use single precision arithmetic and are MATLAB Coder compatible.
+%[text] **Custom Delay-and-Sum Beamformer**
+%[text] This implementation uses fractional delay via linear interpolation for efficient processing.
+fft_size = 512;  % FFT size for frequency domain processing
+processed_signal_ds = delayAndSumBeamformer(anechoic_rcv_noisy', ...
+    target_angles(1), mic_distance, c, fs);
+fprintf('Custom Delay-and-Sum beamformer applied.\n');
+% soundsc(processed_signal_ds(1:num_play_samples)',fs)
+%[text] **Custom MVDR Beamformer**
+%[text] Minimum Variance Distortionless Response beamformer with diagonal loading for numerical stability.
+processed_signal_mvdr = mvdrBeamformer(anechoic_rcv_noisy', ...
+    target_angles(1), mic_distance, c, fs, fft_size);
+fprintf('Custom MVDR beamformer applied.\n');
+% soundsc(processed_signal_mvdr(1:num_play_samples)',fs)
+%%
 %[text] ### Speaker Seperation
 %[text] #### Load a Pretrained Model
 %[text] Execute the following commands to download and unzip a pretrained speaker separation model [`separateSpeakers`](https://ww2.mathworks.cn/help/audio/ref/separatespeakers.html) to your temporary directory.   
@@ -298,6 +315,11 @@ merics_reverb_method1 = calcMetrics(target_signal,reverb_avg_out(:,target_id),fs
 %[text] Method 2: Combining Microphone Array Signals and then separateSpeakers
 merics_reverb_method2_mean = calcMetrics(target_signal,target_reverb_mean(:,target_id),fs)
 merics_reverb_method2_TDBF = calcMetrics(target_signal,target_reverb_TDBF(:,target_id),fs)
+%[text] **Custom Beamformers (Anechoic Chamber)**
+%[text] Method 3: Custom Delay-and-Sum Beamformer
+merics_anechoic_custom_DS = calcMetrics(target_signal, processed_signal_ds, fs)
+%[text] Method 4: Custom MVDR Beamformer
+merics_anechoic_custom_MVDR = calcMetrics(target_signal, processed_signal_mvdr, fs)
 %%
 %[text] ## Submission Files Generation
 %[text] Create submission folders.
@@ -434,6 +456,56 @@ merics.stoi = stoi(enhanced_signal,clean_signal,fs);
 %[text] - `"MOS"` — The output is a scalar representing the mean opinion score (MOS) in the range \[1,5\], where a higher value corresponds to higher quality.
 %[text] - `"NSIM"` — The output is a scalar representing the neurogram similarity index measure (NSIM) in the range \[-1,1\], where 1 corresponds to a perfect similarity between the degraded and reference signals. In practice, the NSIM is generally in the range \[0,1\]. \
 merics.visqol = visqol(enhanced_signal,clean_signal,fs,Mode="speech",OutputMetric="MOS and NSIM");
+end
+%%
+%[text] **calculateAngles**
+%[text] This helper function calculates azimuth and elevation angles from source position relative to microphone center.
+function [azimuth, elevation] = calculateAngles(source_pos, mic_center)
+    % Calculate azimuth and elevation angles from positions
+    v = source_pos - mic_center;
+    [az_rad, el_rad, ~] = cart2sph(v(1), v(2), v(3));
+    azimuth = single(rad2deg(az_rad));
+    elevation = single(rad2deg(el_rad));
+end
+%%
+%[text] **calculateTimeDelays**
+%[text] This helper function calculates time delays for each microphone relative to the first mic.
+function delays = calculateTimeDelays(source_pos, mic_positions, c)
+    % Calculate time delays for each microphone relative to the first mic
+    num_mics = size(mic_positions, 1);
+    distances = zeros(num_mics, 1, 'single');
+
+    for i = 1:num_mics
+        distances(i) = norm(source_pos - mic_positions(i, :));
+    end
+
+    % Delays relative to first microphone
+    delays = single((distances - distances(1)) / c);
+end
+%%
+%[text] **applyDelays**
+%[text] This helper function applies time delays to signal for each microphone.
+function mic_signals = applyDelays(signal, delays, fs)
+    % Apply time delays to signal for each microphone
+    num_mics = length(delays);
+    signal_length = length(signal);
+    mic_signals = zeros(signal_length, num_mics, 'single');
+
+    for i = 1:num_mics
+        delay_samples = round(delays(i) * fs);
+        if delay_samples >= 0
+            % Positive delay - shift signal forward
+            if delay_samples < signal_length
+                mic_signals(delay_samples+1:end, i) = signal(1:end-delay_samples);
+            end
+        else
+            % Negative delay - shift signal backward
+            delay_samples = abs(delay_samples);
+            if delay_samples < signal_length
+                mic_signals(1:end-delay_samples, i) = signal(delay_samples+1:end);
+            end
+        end
+    end
 end
 %%
 %[text] ## References
