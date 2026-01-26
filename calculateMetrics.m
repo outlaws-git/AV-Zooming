@@ -125,8 +125,14 @@ function visqol_approx = approximateViSQOL(clean_signal, enhanced_signal, fs)
     pxx_clean = pxx_clean / sum(pxx_clean);
     pxx_enhanced = pxx_enhanced / sum(pxx_enhanced);
 
-    % Calculate spectral correlation
-    spectral_corr = corr(pxx_clean, pxx_enhanced);
+    % Calculate spectral correlation (manual implementation to avoid toolbox dependency)
+    % Pearson correlation: corr(x,y) = cov(x,y) / (std(x) * std(y))
+    mean_clean = mean(pxx_clean);
+    mean_enhanced = mean(pxx_enhanced);
+    centered_clean = pxx_clean - mean_clean;
+    centered_enhanced = pxx_enhanced - mean_enhanced;
+    spectral_corr = sum(centered_clean .* centered_enhanced) / ...
+                    (sqrt(sum(centered_clean.^2)) * sqrt(sum(centered_enhanced.^2)) + eps);
 
     % Map to ViSQOL-like score (1-5 scale)
     % This is an empirical approximation

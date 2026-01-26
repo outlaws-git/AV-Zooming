@@ -111,8 +111,13 @@ fprintf(' done.\n');
 %% Inverse STFT with overlap-add
 output_signal = overlapAdd(output_stft, fft_size, hop_size);
 
-% Trim to original length
-output_signal = output_signal(1:num_samples);
+% Trim to original length (or pad if shorter)
+if length(output_signal) >= num_samples
+    output_signal = output_signal(1:num_samples);
+else
+    % Pad with zeros if output is shorter than expected
+    output_signal(num_samples) = 0;
+end
 
 % Normalize output
 output_signal = output_signal / (max(abs(output_signal)) + eps('single'));
@@ -168,8 +173,9 @@ function output_signal = overlapAdd(stft_matrix, fft_size, hop_size)
         freq_signal(1:num_freqs) = stft_matrix(:, frame_idx);
 
         % Conjugate symmetry for real signal
+        % For real signals: X[N-k] = conj(X[k]) for k=1 to N/2-1
         if num_freqs < fft_size
-            freq_signal(num_freqs+1:end) = conj(flipud(freq_signal(2:fft_size-num_freqs+2)));
+            freq_signal(num_freqs+1:end) = conj(flipud(freq_signal(2:num_freqs-1)));
         end
 
         % Inverse FFT
