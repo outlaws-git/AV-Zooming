@@ -165,6 +165,29 @@ for source_id = 1:num_sources
         MaterialScattering= scatWall_anechoic,...                 % material scattering coefficients
         BandCenterFrequencies= band_center_freq);                 % center frequencies of the bandpass filters in Hertz
 end
+%[text] **Reverberant Room** 
+%[text] Reverberation Time (RT60): ≈ 0.4-0.6 s -> absorption coefficient ≈ 0.3 (partial absorption), scattering ≈ 0.1. 
+%[text] Typical office/living room acoustic conditions with moderate reverberation.
+absWall_reverb = 0.3*ones(room_surf_num,num_bands);      % material absorption coefficients of walls (partial absorption)
+scatWall_reverb = 0.1*ones(room_surf_num,num_bands);     % material scattering coefficients (some scattering)
+%[text] Generate Room Impulse Response for Task 2: Reverberant Room.
+rir_reverb = cell(num_sources,1);
+for source_id = 1:num_sources
+    rir_reverb{source_id} = acousticRoomResponse(room_dim, ...  % the dimensions of a shoebox room
+        source_positions(source_id,:), ...                        % cartesian coordinates of the transmitter in meters
+        mic_positions,...                                         % cartesian coordinates of the receiver in meters
+        SampleRate= fs, ...                                       % sample rate of the impulse response in Hertz
+        SoundSpeed= c, ...                                        % speed of sound in meters per second
+        Algorithm="hybrid",...                                    % impulse response synthesis algorithm
+        ImageSourceOrder=3,...                                    % image-source maximum order for reflections
+        NumStochasticRays=2000,...                                % number of rays for stochastic ray tracing
+        MaxNumRayReflections=10,...                               % maximum number of reflections per stochastic ray
+        ReceiverRadius= 0.5,...                                   % receiver collection radius
+        AirAbsorption=0.01,...                                    % air absorption coefficient
+        MaterialAbsorption= absWall_reverb,...                    % material absorption coefficients
+        MaterialScattering= scatWall_reverb,...                   % material scattering coefficients
+        BandCenterFrequencies= band_center_freq);                 % center frequencies of the bandpass filters in Hertz
+end
 
 %%
 %[text] ### Generate Received Signals
@@ -182,6 +205,17 @@ for source_id = 1:num_sources
     anechoic_rcv_clean(source_id,:,:) = ...
         reshape(collector(source_signals(source_id,:)',source_angles(source_id,:)')',1,num_mics,signal_length);
 end
+%[text] **Reverberant Room** 
+%[text] Simulate the received audio by filtering with the source signals with reverberant room impulse response.
+reverb_rcv_clean = zeros(num_sources,num_mics,signal_length);
+for source_id = 1:num_sources
+    for mic_id = 1:num_mics
+        % Get the RIR length and determine convolution output length
+        rir_len = length(rir_reverb{source_id}(mic_id,:));
+        conv_result = filter(rir_reverb{source_id}(mic_id,:),1,source_signals(source_id,:));
+        reverb_rcv_clean(source_id,mic_id,:) = conv_result(1:signal_length);
+    end
+end
 %%
 %[text] ### SNR Adjustment
 %[text] **Anechoic Chamber**
@@ -192,6 +226,14 @@ anechoic_rcv_SI = reshape(anechoic_rcv_clean(target_id,:,:) + anechoic_rcv_clean
 %[text] Add noise so the Signal-to-Noise Ratio (SNR) = 5 dB (additive background noise).
 anechoic_rcv_noisy = awgn(anechoic_rcv_SI,desired_snr,'measured'); % randn or dsp.ColoredNoise can be used
 anechoic_snrCheck_5dB = 10*log10(mean((anechoic_rcv_SI.^2),2)./mean(((anechoic_rcv_noisy-anechoic_rcv_SI).^2),2)) %[output:481ddacb]
+%[text] **Reverberant Room**
+%[text] Check Signal-to-Interference Ratio (SIR) =  0 dB (equal power target & interferer).
+reverb_postRIR_SirCheck_0dB = 10*log10(mean((reverb_rcv_clean(target_id,:,:).^2),3)./mean((reverb_rcv_clean(target_id,:,:).^2),3))
+%[text] Add the received target and interference signals at the microphones.
+reverb_rcv_SI = reshape(reverb_rcv_clean(target_id,:,:) + reverb_rcv_clean(interf_id,:,:),num_mics,[]);
+%[text] Add noise so the Signal-to-Noise Ratio (SNR) = 5 dB (additive background noise).
+reverb_rcv_noisy = awgn(reverb_rcv_SI,desired_snr,'measured'); % randn or dsp.ColoredNoise can be used
+reverb_snrCheck_5dB = 10*log10(mean((reverb_rcv_SI.^2),2)./mean(((reverb_rcv_noisy-reverb_rcv_SI).^2),2))
 %%
 %[text] **Play an segment of the received signals** 
 %[text] Anechoic Chamber
@@ -231,6 +273,9 @@ td_beamformer = phased.TimeDelayBeamformer('SensorArray',micULA,...
 
 td_bf_anechoic = td_beamformer(anechoic_rcv_noisy');
 soundsc(td_bf_anechoic(1:num_play_samples)',fs)
+%[text] **Reverberant Room Time Delay Beamformer**
+td_bf_reverb = td_beamformer(reverb_rcv_noisy');
+% soundsc(td_bf_reverb(1:num_play_samples)',fs)
 %%
 %[text] ### Custom Beamforming (Edge-Device Optimized)
 %[text] The following beamformers are custom implementations optimized for resource-constrained edge devices.
